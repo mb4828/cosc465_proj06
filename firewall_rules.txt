@@ -1,0 +1,27 @@
+# drop everything from a network that we don't trust
+deny ip src 192.168.42.0/24 dst any 
+
+# allow traffic to/from an internal web server that should
+# be accessible to external hosts
+permit tcp src 172.16.42.42 srcport 80 dst any dstport any
+permit tcp src any srcport any dst 172.16.42.42 dstport 80
+
+# allow DNS (udp port 53) traffic in/out of network
+permit udp src 172.16.42.0/24 srcport any dst any dstport 53 
+permit udp src any srcport 53 dst 172.16.42.0/24 dstport any 
+
+# allow internal hosts access to web (tcp ports 80 and 443)
+permit tcp src 172.16.42.0/24 srcport any dst any dstport 80
+permit tcp src any srcport any dst 172.16.42.0/24 dstport 80
+permit tcp src 172.16.42.0/24 srcport any dst any dstport 443
+permit tcp src any srcport any dst 172.16.42.0/24 dstport 443
+
+# permit, but rate limit icmp to 100 bytes/sec
+permit icmp src any dst any ratelimit 100
+
+# permit, but rate limit iperf (100kB/s)
+permit tcp src 172.16.42.0/24 srcport 5001 dst any dstport any ratelimit 12500 
+permit tcp src any srcport any dst 172.16.42.0/24 dstport 5001 ratelimit 12500
+
+# block everything else
+deny ip src any dst any 
