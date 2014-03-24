@@ -11,17 +11,14 @@ permit udp src 172.16.42.0/24 srcport any dst any dstport 53
 permit udp src any srcport 53 dst 172.16.42.0/24 dstport any 
 
 # allow internal hosts access to web (tcp ports 80 and 443)
-permit tcp src 172.16.42.0/24 srcport any dst any dstport 80
-permit tcp src any srcport any dst 172.16.42.0/24 dstport 80
+# rate limit http traffic to 100 kB/s (12500 bytes/sec)
+permit tcp src 172.16.42.0/24 srcport any dst any dstport 80 ratelimit 12500
+permit tcp src any srcport any dst 172.16.42.0/24 dstport 80 ratelimit 12500
 permit tcp src 172.16.42.0/24 srcport any dst any dstport 443
 permit tcp src any srcport any dst 172.16.42.0/24 dstport 443
 
 # permit, but rate limit icmp to 100 bytes/sec
 permit icmp src any dst any ratelimit 100
-
-# permit, but rate limit iperf (100kB/s)
-permit tcp src 172.16.42.0/24 srcport 5001 dst any dstport any ratelimit 12500 
-permit tcp src any srcport any dst 172.16.42.0/24 dstport 5001 ratelimit 12500
 
 # block everything else
 deny ip src any dst any 
