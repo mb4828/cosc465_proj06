@@ -13,19 +13,6 @@ class Firewall(object):
     def __init__(self):
         self.fwt = self.buildfwt()
 
-    def buildfwt2(self):
-        f = open("firewall_rules.txt",'r')
-        while 1:
-            entry = f.readline()
-
-            if entry == "":
-                break
-
-            entry = entry.strip(' \n')
-            print entry
-
-        return []
-
     def buildfwt(self):
         '''
         Returns a table containing a representation of the firewall rules
@@ -49,11 +36,11 @@ class Firewall(object):
             entry = f.readline()
             line += 1
 
-            if entry == "":
+            if entry == "": 
                 break
-            elif entry[0] == "#":
+            elif entry[0] == "#": 
                 continue
-            elif entry[0] == "\n":
+            elif entry[0] == "\n": 
                 continue
             else:
                 entry = entry.strip(' \n')
@@ -63,9 +50,9 @@ class Firewall(object):
             tent = []
             
             # permit/deny
-            if esplit[0] == "deny":
+            if esplit[0] == "deny": 
                 tent.append('d')
-            elif esplit[0] == "permit":
+            elif esplit[0] == "permit": 
                 tent.append('p')
             else:
                 print "Entry line " + str(line) + " is invalid: " + str(esplit[0])
@@ -73,11 +60,11 @@ class Firewall(object):
 
             # packet type
             mode=0
-            if esplit[1] == "ip":
+            if esplit[1] == "ip": 
                 tent.append(0)
-            elif esplit[1] == "icmp":
+            elif esplit[1] == "icmp": 
                 tent.append(1)
-            elif esplit[1] == "udp":
+            elif esplit[1] == "udp": 
                 tent.append(2)
                 mode=1
             elif esplit[1] == "tcp":
@@ -87,40 +74,36 @@ class Firewall(object):
                 print "Entry line " + str(line) + " is invalid: " + str(esplit[1])
                 continue
 
-            # src (srcport) dst (dstport)
+            # src, srcport, dst, dstport
+            x=6; y=2
             if mode:
                 if (len(esplit) != 10) and (len(esplit) != 12):
                     print "Entry length line " + str(line) + " is invalid: " + str(esplit)
                     continue
-
-                for z in range(3,9,4):
-                    if esplit[z] == "any":
-                        tent.append(0)
-                    else:
-                        ipsplit = esplit[z].split('/')
-                        if len(ipsplit) == 1:
-                            tent.append( (IPAddr(ipsplit[0]), 32 ) )
-                        else:
-                            tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
-                    if esplit[z+2] == "any":
-                        tent.append(0)
-                    else:
-                        tent.append(int(esplit[z+2]))
-                    
+                x=9; y=4
             else:
                 if (len(esplit) != 6) and (len(esplit) != 8):
                     print "Entry length line " + str(line) + " is invalid: " + str(esplit)
                     continue
+                
+            for i in range(3,x,y):
+                # src/dst
+                if esplit[i] == "any": tent.append(0)
+                else:
+                    ipsplit = esplit[i].split('/')
+                    if len(ipsplit) == 1:
+                        tent.append( (IPAddr(ipsplit[0]), 32 ) )
+                    else:
+                        tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
 
-                for z in range(3,6,2):
-                    if esplit[z] == "any":
+                if mode:
+                    # srcport/dstport
+                    if esplit[i+2] == "any":
                         tent.append(0)
                     else:
-                        ipsplit = esplit[z].split('/')
-                        if len(ipsplit) == 1:
-                            tent.append( (IPAddr(ipsplit[0]), 32) )
-                        else:
-                            tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
+                        tent.append(int(esplit[i+2]))
+                else:
+                    tent.append("x")
 
             # rate limit
             if mode and len(esplit)==12:
