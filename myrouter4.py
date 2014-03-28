@@ -16,9 +16,9 @@ from pox.lib.packet import arp
 from pox.lib.addresses import EthAddr,IPAddr,netmask_to_cidr
 from srpy_common import log_info, log_debug, log_warn, SrpyShutdown, SrpyNoPackets, debugger
 from collections import deque
+from firewall import Firewall
 
 ftablename = "forwarding_table.txt"        # FORWARDING TABLE FILENAME
-frulesname = "firewall_rules.txt"          # FIREWALL RULES FILENAME
 
 class PacketData(object):
     def __init__(self, ippkt, arpreq, dout, din):
