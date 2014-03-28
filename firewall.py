@@ -13,6 +13,19 @@ class Firewall(object):
     def __init__(self):
         self.fwt = self.buildfwt()
 
+    def buildfwt2(self):
+        f = open("firewall_rules.txt",'r')
+        while 1:
+            entry = f.readline()
+
+            if entry == "":
+                break
+
+            entry = entry.strip(' \n')
+            print entry
+
+        return []
+
     def buildfwt(self):
         '''
         Returns a table containing a representation of the firewall rules
@@ -26,28 +39,36 @@ class Firewall(object):
         [p|d,  0=ip|1=icmp|2=udp|3=tcp, 0=any|(IPAddr,masklen)*4,           0=noratelimit|ratelimit]
         0      1                        2-5 (src, srcport, dst, dstport)    6
         '''
+        print "Compiling firewall rules table..."
         fwt = []
-        f = open(fwrulesname,'r')
+        f = open("firewall_rules.txt",'r')
+        line = 0
+        counter = 0
 
         while 1:
             entry = f.readline()
+            line += 1
 
             if entry == "":
                 break
-            if entry[0] == "#":
+            elif entry[0] == "#":
                 continue
+            elif entry[0] == "\n":
+                continue
+            else:
+                entry = entry.strip(' \n')
+                counter += 1
             
             esplit = entry.split()
             tent = []
-            print entry
             
             # permit/deny
-            if esplit[0] == "permit":
-                tent.append('p')
-            elif entry[0] == "deny":
+            if esplit[0] == "deny":
                 tent.append('d')
+            elif esplit[0] == "permit":
+                tent.append('p')
             else:
-                print "Entry is invalid: " + entry
+                print "Entry line " + str(line) + " is invalid: " + str(esplit[0])
                 continue
 
             # packet type
@@ -63,17 +84,16 @@ class Firewall(object):
                 tent.append(3)
                 mode=1
             else:
-                print "Entry is invalid: " + entry
+                print "Entry line " + str(line) + " is invalid: " + str(esplit[1])
                 continue
 
             # src (srcport) dst (dstport)
             if mode:
-                if len(esplit) != 10 or len(esplit) != 12:
-                    print "Entry length is invalid: " + entry
+                if (len(esplit) != 10) and (len(esplit) != 12):
+                    print "Entry length line " + str(line) + " is invalid: " + str(esplit)
                     continue
 
-                for z in range(3,8,4):
-                    print z
+                for z in range(3,9,4):
                     if esplit[z] == "any":
                         tent.append(0)
                     else:
@@ -82,19 +102,17 @@ class Firewall(object):
                             tent.append( (IPAddr(ipsplit[0]), 32 ) )
                         else:
                             tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
-
-                    if esplit[z+1] == "any":
+                    if esplit[z+2] == "any":
                         tent.append(0)
                     else:
-                        tent.append(int(esplit[z+1]))
+                        tent.append(int(esplit[z+2]))
                     
             else:
-                if len(esplit) != 6 or len(esplit) != 8:
-                    print "Entry length is invalid: " + entry
+                if (len(esplit) != 6) and (len(esplit) != 8):
+                    print "Entry length line " + str(line) + " is invalid: " + str(esplit)
                     continue
 
-                for z in range(3,5,2):
-                    print z
+                for z in range(3,6,2):
                     if esplit[z] == "any":
                         tent.append(0)
                     else:
@@ -104,7 +122,7 @@ class Firewall(object):
                         else:
                             tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
 
-            # ratelimit
+            # rate limit
             if mode and len(esplit)==12:
                 tent.append(esplit[11])
             elif len(esplit)==8:
@@ -112,9 +130,9 @@ class Firewall(object):
             else:
                 tent.append(0)
 
-            print tent
             fwt.append(tent)
 
+        print str(counter) + " rules compiled"
         return fwt
 
 def tests():
