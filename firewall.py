@@ -13,6 +13,67 @@ class Firewall(object):
     def __init__(self):
         self.fwt = self.buildfwt()
 
+    def allow(self, ippkt):
+        '''
+        Returns 1 if an IP packet should be allowed through the firewall and 0 otherwise
+        '''
+        print ippkt.dump()
+
+        if ippkt.v != 4:
+            return 0    # no IPv6 packets allowed!
+
+        for rule in self.fwt:
+            print "*"*8; print rule
+
+            # check pkt src and dst with rule src and dst
+            rulesrc = (rule[1][0]).toUnsigned()
+            srcmask = cidr_to_netmask(rule[1][1]).toUnsigned()
+            ruledst = (rule[2][0]).toUnsigned()
+            dstmask = cidr_to_netmask(rule[2][1]).toUnsigned()
+
+            srcmatch = (ippkt.srcip.toUnsigned() & srcmask) == rulesrc
+            dstmatch = (ippkt.dstip.toUnsigned() & dstmask) == ruledst
+            
+            print "srcmatch: " + str(srcmatch) + "\ndstmatch: " + str(dstmatch)
+
+            if (not srcmatch) and (not dstmatch):
+                print "rule does not match pkt src and dst"
+                continue
+
+            # check pkt protocol with rule protocol
+            print "rule id: " + str(rule[0])
+            if (ippkt.protocol != ippkt.UDP_PROTOCOL) and (ippkt.protocol != ippkt.TCP_PROTOCOL):
+                print "not special - should have rule id 0,1,4,5"
+                if rule[0]==0 and ippkt.protocol!=ippkt.ICMP_PROTOCOL:      return 0    # deny ip
+                elif rule[0]==1 and ippkt.protocol==ippkt.ICMP_PROTOCOL:    return 0    # deny icmp
+                elif rule[0]==4 and ippkt.protocol!=ippkt.ICMP_PROTOCOL:    return 1    # permit ip
+                elif rule[0]==5 and ippkt.protocol==ippkt.ICMP_PROTOCOL:    return 1    # permit icmp
+                else:
+                    print "error!"
+                    return -1
+            else:
+                print "special - should have rule id 2,3,6,7"
+
+                # check pkt ports with rule ports
+                sportmatch = (rule[3] == ippkt.payload.srcport) or (rule[3] == 0)
+                dportmatch = (rule[4] == ippkt.payload.dstport) or (rule[4] == 0)
+
+                print "sportmatch: " + str(sportmatch) + "\ndportmatch: " + str(dportmatch)
+
+                if (not sportmatch) and (not dportmatch):
+                    print "rule does not match udp/tcp port"
+                    continue
+
+                if rule[0]==2 and ippkt.protocol==ippkt.UDP_PROTOCOL:       return 0    # deny udp
+                elif rule[0]==3 and ippkt.protocol==ippkt.TCP_PROTOCOL:     return 0    # deny tcp
+                elif rule[0]==6 and ippkt.protocol==ippkt.UDP_PROTOCOL:     return 1    # permit udp
+                elif rule[0]==7 and ippkt.protocol==ippkt.TCP_PROTOCOL:     return 1    # permit tcp
+                else:
+                    print "error!"
+                    return -1
+
+            return -1
+
     def buildfwt(self):
         '''
         Returns a list containing a representation of the firewall rules in the order in which they appear
@@ -76,12 +137,8 @@ class Firewall(object):
             else: pickup=[3,5]          # src IP at 3, dst IP at 5
 
             for i in range(2):
-                if esplit[pickup[i]] == "any":
-                    fwtent.append((IPAddr("255.255.255.255"),32))
-                else:
-                    ipsplit = esplit[pickup[i]].split('/')
-                    if len(ipsplit)==1: fwtent.append((IPAddr(ipsplit[0]), 32))
-                    else: fwtent.append((IPAddr(ipsplit[0]), int(ipsplit[1])))
+                if esplit[pickup[i]]=="any": fwtent.append((IPAddr("255.255.255.255"),32))
+                else: fwtent.append(parse_cidr(esplit[pickup[i]]))
 
             # src port, dst port
             if special:
@@ -96,22 +153,22 @@ class Firewall(object):
             #print entry; print fwtent; print "*"*32 
             fwt.append(fwtent)
 
-        print str(line-1) + " lines read; " + str(counter) + " rules compiled"
+        print str(line-1) + " lines read; " + str(counter) + " rules compiled\n"
         return fwt
 
 def tests():
     f = Firewall()
 
-    #ip = ipv4()
-    #ip.srcip = IPAddr("172.16.42.1")
-    #ip.dstip = IPAddr("10.0.0.2")
-    #ip.protocol = 17
-    #xudp = udp()
-    #xudp.srcport = 53
-    #xudp.dstport = 53
-    #xudp.payload = "Hello, world"
-    #xudp.len = 8 + len(xudp.payload)
-    #ip.payload = xudp
+    ip = ipv4()
+    ip.srcip = IPAddr("172.16.42.1")
+    ip.dstip = IPAddr("10.0.0.2")
+    ip.protocol = 17
+    xudp = udp()
+    xudp.srcport = 53
+    xudp.dstport = 53
+    xudp.payload = "Hello, world"
+    xudp.len = 8 + len(xudp.payload)
+    ip.payload = xudp
 
     #print len(ip) # print the length of the packet, just for fun
 
@@ -123,7 +180,7 @@ def tests():
     # again, you can name your "checker" as you want, but the
     # idea here is that we call some method on the firewall to
     # test whether a given packet should be permitted or denied.
-    #assert(f.allow(ip) == True)
+    assert(f.allow(ip) == True)
 
     # if you want to simulate a time delay and updating token buckets,
     # you can just call time.sleep and then update the buckets.
@@ -131,6 +188,5 @@ def tests():
     #f.update_token_buckets()
 
 if __name__ == '__main__':
-    # only call tests() if this file gets invoked directly,
-    # not if it is imported.
+    # only call tests() if this file gets invoked directly, not if it is imported.
     tests()
