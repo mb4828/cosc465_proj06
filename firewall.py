@@ -15,107 +15,88 @@ class Firewall(object):
 
     def buildfwt(self):
         '''
-        Returns a table containing a representation of the firewall rules
+        Returns a list containing a representation of the firewall rules in the order in which they appear
 
-        Rule syntax:
+        Input rule syntax:
         [permit|deny] ip src [srcnet|any] dst [dstnet|any]
         [permit|deny| icmp src [srcnet|any] dst [dstnet|any]
         [permit|deny] [udp|tcp] src [srcnet|any] srcport [portno|any] dst [dstnet|any] dstport [portno|any]
 
-        Final list entry syntax:
-        [p|d,  0=ip|1=icmp|2=udp|3=tcp, 0=any|(IPAddr,masklen)*4,           0=noratelimit|ratelimit]
-        0      1                        2-5 (src, srcport, dst, dstport)    6
+        Output list entry syntax:
+        [protocol, (source IP, masklen), (dest IP, masklen), src port, dst port]
+
+        Protocol assignments:
+        (0) 000 = deny ip       (4) 100 = permit ip
+        (1) 001 = deny icmp     (5) 101 = permit icmp
+        (2) 010 = deny udp      (6) 110 = permit udp
+        (3) 011 = deny tcp      (7) 111 = permit tcp
+
+        Wildcard IP: 255.255.255.255
         '''
         print "Compiling firewall rules table..."
         fwt = []
         f = open("firewall_rules.txt",'r')
-        line = 0
-        counter = 0
+        line=0; counter=0
 
         while 1:
             entry = f.readline()
             line += 1
 
-            if entry == "": 
-                break
-            elif entry[0] == "#": 
-                continue
-            elif entry[0] == "\n": 
-                continue
+            # initial checks
+            if entry == "": break
+            elif entry[0] == "#": continue
+            elif entry[0] == "\n": continue
             else:
                 entry = entry.strip(' \n')
                 counter += 1
-            
+
+            # variables
             esplit = entry.split()
-            tent = []
+            fwtent = []
+            special = 0
+
+            # protocol
+            if esplit[0] == "deny":
+                if esplit[1]=="ip":     fwtent.append(0)
+                elif esplit[1]=="icmp": fwtent.append(1)
+                elif esplit[1]=="udp":  fwtent.append(2); special=1
+                elif esplit[1]=="tcp":  fwtent.append(3); special=1
+                else: print "Error in entry line " + str(line) + ": " + str(esplit[1]); continue
+            elif esplit[0] == "permit":
+                if esplit[1]=="ip":     fwtent.append(4)
+                elif esplit[1]=="icmp": fwtent.append(5)
+                elif esplit[1]=="udp":  fwtent.append(6); special=1
+                elif esplit[1]=="tcp":  fwtent.append(7); special=1
+                else: print "Error in entry line " + str(line) + ": " + str(esplit[1]); continue
+            else:
+                print "Error in entry line " + str(line) + ": " + str(esplit[0]); continue
             
-            # permit/deny
-            if esplit[0] == "deny": 
-                tent.append('d')
-            elif esplit[0] == "permit": 
-                tent.append('p')
-            else:
-                print "Entry line " + str(line) + " is invalid: " + str(esplit[0])
-                continue
+            # src IP, dst IP
+            if special: pickup=[3,7]    # src IP at 3, dst IP at 7
+            else: pickup=[3,5]          # src IP at 3, dst IP at 5
 
-            # packet type
-            mode=0
-            if esplit[1] == "ip": 
-                tent.append(0)
-            elif esplit[1] == "icmp": 
-                tent.append(1)
-            elif esplit[1] == "udp": 
-                tent.append(2)
-                mode=1
-            elif esplit[1] == "tcp":
-                tent.append(3)
-                mode=1
-            else:
-                print "Entry line " + str(line) + " is invalid: " + str(esplit[1])
-                continue
-
-            # src, srcport, dst, dstport
-            x=6; y=2
-            if mode:
-                if (len(esplit) != 10) and (len(esplit) != 12):
-                    print "Entry length line " + str(line) + " is invalid: " + str(esplit)
-                    continue
-                x=9; y=4
-            else:
-                if (len(esplit) != 6) and (len(esplit) != 8):
-                    print "Entry length line " + str(line) + " is invalid: " + str(esplit)
-                    continue
-                
-            for i in range(3,x,y):
-                # src/dst
-                if esplit[i] == "any": tent.append(0)
+            for i in range(2):
+                if esplit[pickup[i]] == "any":
+                    fwtent.append((IPAddr("255.255.255.255"),32))
                 else:
-                    ipsplit = esplit[i].split('/')
-                    if len(ipsplit) == 1:
-                        tent.append( (IPAddr(ipsplit[0]), 32 ) )
-                    else:
-                        tent.append( (IPAddr(ipsplit[0]), int(ipsplit[1])) )
+                    ipsplit = esplit[pickup[i]].split('/')
+                    if len(ipsplit)==1: fwtent.append((IPAddr(ipsplit[0]), 32))
+                    else: fwtent.append((IPAddr(ipsplit[0]), int(ipsplit[1])))
 
-                if mode:
-                    # srcport/dstport
-                    if esplit[i+2] == "any":
-                        tent.append(0)
-                    else:
-                        tent.append(int(esplit[i+2]))
-                else:
-                    tent.append("x")
+            # src port, dst port
+            if special:
+                pickup=[5,9]            # src port at 5, dst port at 9
 
-            # rate limit
-            if mode and len(esplit)==12:
-                tent.append(esplit[11])
-            elif len(esplit)==8:
-                tent.append(esplit[7])
+                for i in range(2):
+                    if esplit[pickup[i]]=="any": fwtent.append(0)
+                    else: fwtent.append(int(esplit[pickup[i]]))
             else:
-                tent.append(0)
+                fwtent.append('x'); fwtent.append('x')
 
-            fwt.append(tent)
+            #print entry; print fwtent; print "*"*32 
+            fwt.append(fwtent)
 
-        print str(counter) + " rules compiled"
+        print str(line-1) + " lines read; " + str(counter) + " rules compiled"
         return fwt
 
 def tests():
