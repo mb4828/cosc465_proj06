@@ -16,7 +16,7 @@ from pox.lib.packet import arp
 from pox.lib.addresses import EthAddr,IPAddr,netmask_to_cidr
 from srpy_common import log_info, log_debug, log_warn, SrpyShutdown, SrpyNoPackets, debugger
 from collections import deque
-from firewall import Firewall
+from firewall import Firewall,TBucket
 
 ftablename = "forwarding_table.txt"        # FORWARDING TABLE FILENAME
 
@@ -47,6 +47,7 @@ class PacketData(object):
 class Router(object):
     def __init__(self, net):
         self.net = net
+        self.firewall = Firewall()
         self.myports = dict()        # ethernet address translations for my ip addresses (key: ipaddr, value: ethaddr)
         self.maccache = dict()       # cached MAC addresses from elsewhere on network (key: ipaddr, value: MAC addr)
         self.ftable = self.buildft() # ip fowarding table (entry: (network addr, subnet mask, next hop, interface))
@@ -62,8 +63,11 @@ class Router(object):
             print "-"*64
 
             try:
-                dev,ts,pkt = self.net.recv_packet(timeout=1.0)
+                dev,ts,pkt = self.net.recv_packet(timeout=0.5)
             except SrpyNoPackets:
+                # 0. update token buckets
+                self.firewall.update_token_buckets()
+
                 # 1. update/resend expired jobs in the job queue
                 rv = self.queueupdater()
                 if rv != 0:
@@ -74,34 +78,41 @@ class Router(object):
             except SrpyShutdown:
                 return
 
-            # 2. handle ARP replies for me
+            # 0. update token buckets and run packet through firewall
+            self.firewall.update_token_buckets()
+            rv = self.firewall.allow(pkt.payload)
+            if rv == 0:
+                continue                                            # packet is blocked, drop it!
+            print "---"
+
+            # 1. handle ARP replies for me
             rv = self.arprephandler(pkt)
             if rv != 0:
                 self.net.send_packet(rv[0], rv[1])                  # send completed packet
                 self.maccache[pkt.payload.protosrc] = pkt.src       # log MAC address
                 continue
 
-            # 3. handle IP packets destined for other hosts
+            # 2. handle IP packets destined for other hosts
             rv = self.packethandler(pkt, dev)
             if rv != 0:
                 self.net.send_packet(rv[0], rv[1])                  # send IP packet or ARP req
                 continue
 
-            # 4. handle ARP requests for my interfaces
+            # 3. handle ARP requests for my interfaces
             rv = self.arpreqhandler(pkt)
             if rv != 0:
                 self.net.send_packet(dev, rv)                       # send ARP reply
                 self.maccache[pkt.payload.protosrc] = pkt.src       # log MAC address
                 continue
 
-            # 5. handle ICMP echo requests for me
+            # 4. handle ICMP echo requests for me
             rv = self.ICMPreqhandler(pkt, dev)
             if rv != 0:
                 self.net.send_packet(rv[0], rv[1])                  # send echo reply or ARP req
                 self.maccache[pkt.payload.srcip] = pkt.src          # log MAC address
                 continue
 
-            # 6. handle misc packets addressed to me
+            # 5. handle misc packets addressed to me
             rv = self.miscpackethandler(pkt, dev)
             if rv != 0:
                 self.net.send_packet(rv[0], rv[1])                  # send port unreachable error or ARP req
