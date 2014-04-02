@@ -80,10 +80,11 @@ class Router(object):
 
             # 0. update token buckets and run packet through firewall
             self.firewall.update_token_buckets()
-            rv = self.firewall.allow(pkt.payload)
-            if rv == 0:
-                continue                                            # packet is blocked, drop it!
-            print "---"
+            if pkt.type == pkt.IP_TYPE:
+                rv = self.firewall.allow(pkt.payload)
+                if rv == 0:
+                    continue                                            # packet is blocked, drop it!
+                print "---"
 
             # 1. handle ARP replies for me
             rv = self.arprephandler(pkt)
