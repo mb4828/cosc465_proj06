@@ -19,11 +19,17 @@ class TBucket(object):
         '''
         Updates the token bucket according to the assigned rate limit r
         '''
-        if self.numtoks <= 2*self.r:
-            self.numtoks += self.r/2
-            if self.numtoks > 2*self.r:     # check for overflow
-                self.numtoks = 2*self.r
-        print str(self.r/2) + " tokens added to bucket " + str(self.bid) + " totaling " + str(self.numtoks)   
+        maxtoks = 2*(self.r)
+        toadd = (self.r)/2
+
+        if self.numtoks == maxtoks:
+            print "Bucket " + str(self.bid) + " is full. 0 tokens added totaling " + str(self.numtoks)
+        elif self.numtoks + toadd <= maxtoks:
+            self.numtoks += toadd
+            print str(self.r/2) + " tokens added to bucket " + str(self.bid) + " totaling " + str(self.numtoks)
+        else:
+            print str(maxtoks-self.numtoks) + " tokens added to bucket " + str(self.bid) + " totaling " + str(maxtoks)
+            self.numtoks = maxtoks
 
     def remove(self, n):
         '''
